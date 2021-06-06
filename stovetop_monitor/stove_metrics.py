@@ -1,3 +1,11 @@
+#####################################################
+# SIT210 Project - Stovetop Monitor
+# SID: 215279167
+#
+# stove_metrics.py
+#
+#####################################################
+
 from datetime import datetime
 
 class StoveMetrics:
@@ -31,7 +39,6 @@ class StoveMetrics:
             self.hum_list.pop(0)
             self.dist_list.pop(0)
             self.event_time_list.pop(0)
-
     
     def create_rolling_metrics(self):
         # create rolling metrics list as dictionary objects for conversion to json

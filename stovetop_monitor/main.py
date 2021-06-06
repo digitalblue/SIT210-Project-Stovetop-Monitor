@@ -1,32 +1,54 @@
+#####################################################
+# SIT210 Project - Stovetop Monitor
+# SID: 215279167
+#
+# main.py
+#
+#####################################################
+
 from stove_metrics import StoveMetrics
 
 import picamera
-from concurrent.futures import TimeoutError
-from google.cloud import pubsub_v1
-import json
-from datetime import datetime
-import time
-from time import sleep
-import threading
-from gpiozero import LED
-import RPi.GPIO as GPIO
 import os
-from pathlib import Path
 import io
+import json
 import logging
 import socketserver
+import time
+import threading
+import RPi.GPIO as GPIO
+from google.cloud import pubsub_v1
+from datetime import datetime
+from time import sleep
+from gpiozero import LED
+from pathlib import Path
 from threading import Condition
 from http import server
 
-metrics = StoveMetrics()
+
+logging.basicConfig(level=logging.INFO)
 
 PAGE = Path('index.html').read_text()
+TEMP_THRESHOLD = 30 # degrees 
+ALARM_DURATION_THRESHOLD = 10 # minutes
 
-buzzer_on = False
-temp_threshold = 30
-alarm_duration_threshold = 2
+# define leds and buzzer pin
+led_green = LED(4)
+led_red = LED(27)
+buzzer = 17
 
-logging.basicConfig(level=logging.ERROR)
+GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(buzzer, GPIO.OUT, initial=GPIO.LOW)
+
+# set GCP project setting and create pubsub client
+project_id = os.getenv('GCP_PROJECT_ID')
+subscription_id = os.getenv('GCP_TOPIC_SUB_ID')
+subscriber = pubsub_v1.SubscriberClient()
+subscription_path = subscriber.subscription_path(project_id, subscription_id)
+
+# create single instance of StoveMetrics class
+metrics = StoveMetrics()
 
 class StreamingOutput(object):
     def __init__(self):
@@ -46,10 +68,6 @@ class StreamingOutput(object):
         return self.buffer.write(buf)
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
-    
-    def set_output(output):
-        self.output = output
-
     def do_GET(self):
         if self.path == '/':
             self.send_response(301)
@@ -101,54 +119,29 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-
-project_id = os.getenv('GCP_PROJECT_ID')
-subscription_id = os.getenv('GCP_TOPIC_SUB_ID')
-
-# The `subscription_path` method creates a fully qualified identifier
-# in the form `projects/{project_id}/subscriptions/{subscription_id}`
-subscriber = pubsub_v1.SubscriberClient()
-subscription_path = subscriber.subscription_path(project_id, subscription_id)
-
-
-led_green = LED(4)
-led_red = LED(27)
-buzzer = 17
-
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(buzzer, GPIO.OUT, initial=GPIO.LOW)
-
-
-    
-def clear_all_leds():
-    led_green.off()
-    led_red.off()
-    
-def callback(message):  
+def event_callback(message):  
     if message.data:
         logging.info('Event received: %s', message.data)
         msg = json.loads(message.data)
+        
+        # convert published time from UTC to local time
         pub_time = message.publish_time
-        # convert from UTC to local time
         now_timestamp = time.time()
         offset = datetime.fromtimestamp(now_timestamp) - datetime.utcfromtimestamp(now_timestamp)      
         event_time = pub_time + offset
+        
         metrics.set_metrics(msg['temp'], msg['hum'], msg['dist'], event_time.replace(tzinfo=None))
     message.ack()
-   
 
-future = subscriber.subscribe(subscription_path, callback=callback)
-clear_all_leds()
-
-def start_consuming():
+def event_subscriber():
     with subscriber:
         try:
             future.result()
         except KeyboardInterrupt:
             future.cancel()
                
-def alarm_monitor():
+def alarm_status_processor():
+    # trigger metric holds initial event greater than threshold
     trigger_metric = [0, 0, 0, datetime.now()]
     alarm_level_1_on = False
     alarm_level_2_on = False
@@ -156,26 +149,25 @@ def alarm_monitor():
         latest_metric = metrics.get_avg_metrics()
         temp = latest_metric[0]
         evt_time = latest_metric[3]
-        
-        if buzzer_on:
-            GPIO.output(buzzer, GPIO.HIGH)
-        if temp > temp_threshold:
+
+        # determine alarm level
+        if temp > TEMP_THRESHOLD:
             if alarm_level_1_on:
                 diff = evt_time - trigger_metric[3]
                 diff_min = diff.total_seconds() / 60
-                if diff_min > alarm_duration_threshold:
+                if diff_min > ALARM_DURATION_THRESHOLD:
                     alarm_level_2_on = True
                 else:
                     alarm_level_2_on = False
             else:
                 trigger_metric = latest_metric
-                alarm_level_1_on = True
-            
+                alarm_level_1_on = True            
         else:
             trigger_metric = [0, 0, 0, datetime.now()]
             alarm_level_1_on = False
             alarm_level_2_on = False
             
+        # set led, buzzer and UI status based on determined alarm level
         if alarm_level_1_on:
             led_green.off()
             led_red.on()
@@ -191,27 +183,28 @@ def alarm_monitor():
             metrics.set_health_status(0)
         sleep(0.1)
         
+        # pause to flash off
         led_green.off()
         led_red.off()
         GPIO.output(buzzer, GPIO.LOW)
         sleep(0.9)        
 
 
-if __name__=="__main__":
-    consumer = threading.Thread(target=start_consuming)
-    monitor = threading.Thread(target=alarm_monitor)
+if __name__=="__main__":    
+    future = subscriber.subscribe(subscription_path, callback=event_callback)
+    event_consumer = threading.Thread(target=event_subscriber)
+    alarm_status_monitor = threading.Thread(target=alarm_status_processor)
     
-    consumer.start()
-    monitor.start()
+    # start event consumer and alarm status processing on different threads
+    event_consumer.start()
+    alarm_status_monitor.start()
     
+    # start http server with streaming video
     with picamera.PiCamera() as camera:
         camera.resolution = (640, 480)
         camera.framerate = 24
         output = StreamingOutput()
-        #Uncomment the next line to change your Pi's Camera rotation (in degrees)
-        #camera.rotation = 90
-        camera.start_recording(output, format='mjpeg')
-        
+        camera.start_recording(output, format='mjpeg')        
         try:
             address = ('', 8000)
             server = StreamingServer(address, StreamingHandler)
