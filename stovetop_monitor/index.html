@@ -1,0 +1,281 @@
+<html>
+<head>
+<title>Stovetop Monitor</title>
+<script type="text/javascript"/>
+function MetricsEventHandler() {
+    var request = new XMLHttpRequest();
+    request.open("GET", "/metrics");
+
+    // defining event listener for readystatechange event
+    request.onreadystatechange = function() {
+        // check if the request is compete and was successful
+        if(this.readyState === 4 && this.status === 200) {
+            // parsing the response
+	    var metrics = JSON.parse(this.responseText);
+	    if (metrics.length > 0) {
+		// set header date from event
+		document.getElementById("header_date").innerHTML = metrics[0].time.substr(0, metrics[0].time.indexOf(","));
+		
+		// set avg values in sidebar
+		document.getElementById("temp_avg").innerHTML = (Math.round(metrics[0].temp * 100) / 100).toFixed(2);
+		document.getElementById("hum_avg").innerHTML = (Math.round(metrics[0].hum * 100) / 100).toFixed(2);
+				
+		// set latest values in sidebar
+		var latest_idx = metrics.length - 1;
+		document.getElementById("temp_latest").innerHTML = (Math.round(metrics[latest_idx].temp * 100) / 100).toFixed(2);
+		document.getElementById("hum_latest").innerHTML = (Math.round(metrics[latest_idx].hum * 100) / 100).toFixed(2);
+		document.getElementById("dist_latest").innerHTML = (Math.round(metrics[latest_idx].dist * 100) / 100).toFixed(2);
+		
+		// set rolling values in table
+		for (var i = 1; i < metrics.length; i++) {
+		    document.getElementById("temp_" + i).innerHTML = (Math.round(metrics[i].temp * 100) / 100).toFixed(2);
+		    document.getElementById("hum_" + i).innerHTML = (Math.round(metrics[i].hum * 100) / 100).toFixed(2);
+		    document.getElementById("time_" + i).innerHTML = metrics[i].time.substr(-8);
+		}
+		
+		// set UI heath status led 
+		var status = metrics[0].status;
+		switch (status) {
+		    case 0: document.getElementById("status_dot").style.animation = "blinking_green 1s infinite";
+		    break;
+		    case 1: document.getElementById("status_dot").style.animation = "blinking_orange 1s infinite";
+		    break;
+		    case 2: document.getElementById("status_dot").style.animation = "blinking_red 1s infinite";
+		    break;
+		}
+		
+		// set debug output - uncomment for debugging
+		//document.getElementById("debug_output").innerHTML = this.responseText;
+	    }
+        }
+    };
+    request.send();
+}
+
+setTimeout(function run() {
+    MetricsEventHandler();
+    setTimeout(run, 1000);
+}, 1000);
+
+</script>
+<style>
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #404040;
+    background-color: #F8F8F8;
+    margin: 0;
+}
+
+h1 {
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+h3 {
+    color: #3FBAD2;
+    font-size: 20px;
+}
+
+table {
+    width: 100%;
+}
+
+td {
+    font-size: 18px;
+    width: 16%;
+    margin: 0;
+    padding: 10px;
+}
+
+
+.header_container {
+    background-color: #3FBAD2;
+    height: 60px;
+    padding: 15px;
+}
+.header {    
+    width: 900px;
+    margin: 0 auto;
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 30px;
+    padding-top: 30px;
+}
+.header > span {
+    float: right;
+}
+.outer_container {
+    width: 900px;
+    height: 90%;
+    background-color: #FFFFFF;
+    margin: 0 auto;
+}
+.table_container {
+    clear: both;
+    padding-top: 10px;
+}
+.center_layout {
+    text-align: center; 
+    padding-top: 10px;    
+}
+.left_sidebar {
+    float: left;
+    width: 14%;
+}
+.video_box {
+    float: left;
+    width: 72%;
+}
+.right_sidebar {
+    float: left;
+    width: 14%;
+}
+
+.sidebox {
+    border-bottom: 1px solid #3FBAD2;
+    height:100px;
+    margin-bottom: 10px;
+    text-align: center;
+    line-height: 0.8;
+    margin-left: 2px;
+    margin-right: 2px;
+}
+.sidebox > p {
+    margin-top: -4px;
+    font-size: 36px;
+    font-weight: 700;
+}
+.row_header {
+    background-color: #404040;
+    color: #FFFFFF;
+    font-weight: 700;
+}
+.row_even {
+    background-color: #F8F8F8;
+    font-weight: 700;
+}
+.row_odd {
+    background-color: #DCDCDC;
+    font-weight: 700;
+}
+#status_dot {
+  height: 32px;
+  width: 32px;
+  background-color: #3CB371;
+  border-radius: 50%;
+  display: inline-block;
+  animation: blinking_green 1s infinite;
+}
+
+@keyframes blinking_green {
+  0% {
+    background-color: #CCCCCC;
+    border: 2px solid #404040;
+  }
+  100% {
+    background-color: #3CB371;
+    border: 2px solid #404040;
+  }
+}
+
+@keyframes blinking_orange {
+  0% {
+    background-color: #CCCCCC;
+    border: 2px solid #404040;
+  }
+  100% {
+    background-color: #FFA500;
+    border: 2px solid #404040;
+  }
+}
+
+@keyframes blinking_red {
+  0% {
+    background-color: #CCCCCC;
+    border: 2px solid #404040;
+  }
+  100% {
+    background-color: #FF0000;
+    border: 2px solid #404040;
+  }
+}
+
+</style>
+</head>
+<body>
+    <div class="header_container">
+	<div class="header">
+	    STOVETOP MONITOR
+	    <span id="header_date"></span>
+	</div>
+    </div>
+<div class="outer_container">
+    <div class="center_layout">
+	<div class="left_sidebar">
+	    <div class="sidebox">
+		<h3>Temperature</h3>
+		<p id="temp_latest"></p>
+	    </div>
+	    <div class="sidebox">
+		<h3>Humidity</h3>
+		<p id="hum_latest"></p>
+	    </div>
+	    <div class="sidebox">
+		<h3>Distance</h3>
+		<p id="dist_latest"></p>
+	    </div>
+	</div>
+	<div class="video_box">
+	    <img src="stream.mjpg" width="640" height="480">
+	</div>
+	<div class="right_sidebar">
+	    <div class="sidebox">
+		<h3>Status</h3>
+		<p><span id="status_dot"></span></p>
+	    </div>
+	    <div class="sidebox">
+		<h3>Avg Temp</h3>
+		<p id="temp_avg"></p>
+	    </div>
+	    <div class="sidebox">
+		<h3>Avg Hum</h3>
+		<p id="hum_avg"></p>
+	    </div>
+	</div>    
+    </div>
+
+    <div class="table_container">
+	<table>
+	    <tr class="row_header">
+		<td colspan=6>Rolling data</td>
+	    </tr>
+	    <tr class="row_even">
+		<td>Temperature</td>
+		<td id="temp_1"></td>
+		<td id="temp_2"></td>
+		<td id="temp_3"></td>
+		<td id="temp_4"></td>
+		<td id="temp_5"></td>
+	    </tr>
+	    <tr class="row_odd">
+		<td>Humidity</td>
+		<td id="hum_1"></td>
+		<td id="hum_2"></td>
+		<td id="hum_3"></td>
+		<td id="hum_4"></td>
+		<td id="hum_5"></td>
+	    </tr>
+	    <tr class="row_even">
+		<td>Event Time</td>
+		<td id="time_1"></td>
+		<td id="time_2"></td>
+		<td id="time_3"></td>
+		<td id="time_4"></td>
+		<td id="time_5"></td>
+	    </tr>
+	</table>
+    </div>
+<p id="debug_output"</p>
+</div>
+</body>
+</html>
