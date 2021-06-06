@@ -4,6 +4,10 @@
 #
 # main.py
 #
+# Streaming http server source code and classes
+# utilised from official PiCamera package
+# http://picamera.readthedocs.io/en/latest/recipes2.html#web-streaming
+#
 #####################################################
 
 from stove_metrics import StoveMetrics
