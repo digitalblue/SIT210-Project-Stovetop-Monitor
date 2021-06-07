@@ -75,4 +75,4 @@ python -m unittest test.stove_metrics_test
 
 On GCP Console
 * Confirm events are published to topic from Paricle Argon
-* Confirm events are acknowledged and consumer in topic subscription from Raspberry Pi
+* Confirm events are acknowledged and consumed in topic subscription from Raspberry Pi
