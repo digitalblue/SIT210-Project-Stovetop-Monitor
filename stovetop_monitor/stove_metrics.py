@@ -19,7 +19,7 @@ class StoveMetrics:
         self.temp_avg = 0.0
         self.hum_avg = 0.0
         self.dist_avg = 0.0
-        self.health_status = 0;
+        self.health_status = 0
     
     def set_metrics(self, temp, hum, dist, event_time):
         self.temp_list.append(temp)
